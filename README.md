@@ -5,15 +5,16 @@ Automated price protection tracking.
 Track prices and notify if price drops so you can get your well deserved refund (store price protection, visa price protection, etc.)
 
 - backend up and running locally
-    - Rust, actix, juniper, diesel, postgres
+  - Rust, actix, juniper, diesel, postgres
+  - Nice example app: https://github.com/nemesiscodex/actix-blog-app/tree/master/src
 - frontend up and running locally
-    - svelte, graphql, a component lib? snow/webpack?
+  - svelte, graphql, a component lib? snow/webpack?
 - deploy backend
-    - dockerize -> ecs
-    - cloudformation to manage infra.. or terraform.. other tools?
-    - deploy infra / code changes on merge to master? through CI? circleci?
+  - dockerize -> ecs
+  - cloudformation to manage infra.. or terraform.. other tools?
+  - deploy infra / code changes on merge to master? through CI? circleci?
 - deploy frontend
-    - cloudfront / s3
+  - cloudfront / s3
 
 # Setup Instructions
 

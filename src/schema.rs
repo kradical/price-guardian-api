@@ -1,7 +1,7 @@
 table! {
     users (id) {
         id -> Int4,
-        email -> Citext,
+        email -> Text,
         password -> Text,
         created_at -> Timestamp,
         updated_at -> Timestamp,

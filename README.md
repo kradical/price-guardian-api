@@ -6,7 +6,6 @@ Track prices and notify if price drops so you can get your well deserved refund 
 
 - backend up and running locally
   - Rust, actix, juniper, diesel, postgres
-  - Nice example app: https://github.com/nemesiscodex/actix-blog-app/tree/master/src
 - frontend up and running locally
   - svelte, graphql, a component lib? snow/webpack?
 - deploy backend
@@ -15,6 +14,12 @@ Track prices and notify if price drops so you can get your well deserved refund 
   - deploy infra / code changes on merge to master? through CI? circleci?
 - deploy frontend
   - cloudfront / s3
+
+Some example apps:
+
+- https://github.com/nemesiscodex/actix-blog-app/tree/master/src
+- https://github.com/jamesjmeyer210/actix_sqlx_mysql_user_crud
+- https://github.com/marcusradell/monadium
 
 # Setup Instructions
 

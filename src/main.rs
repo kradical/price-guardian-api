@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate diesel;
+extern crate argonautica;
 
 use actix_cors::Cors;
 use actix_web::{http::header, middleware, web, App, Error, HttpResponse, HttpServer};

@@ -90,3 +90,17 @@ Create the db and migrate to the latest and greatest:
 diesel setup
 diesel migration run
 ```
+
+## Compile and Run
+
+Install llvm, argonautica requires a c compiler:
+
+```
+apt-get install clang llvm-dev libclang-dev
+```
+
+Run the app:
+
+```
+cargo run
+```

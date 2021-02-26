@@ -3,7 +3,7 @@ table! {
         id -> Int4,
         email -> Text,
         password -> Text,
-        created_at -> Timestamp,
-        updated_at -> Timestamp,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
     }
 }

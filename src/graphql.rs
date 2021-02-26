@@ -33,16 +33,12 @@ impl<S: ScalarValue + std::fmt::Display> Mutation {
             .db
             .get()
             .map_err(|_e| "Error getting db connection")?;
-        diesel::insert_into(users)
+        let user = diesel::insert_into(users)
             .values(&new_user)
-            .execute(&conn)
-            // .get_result(&conn)
+            .get_result(&conn)
             .map_err(|_e| "Error inserting user")?;
 
-        Ok(User {
-            email: new_user.email,
-            id: 123,
-        })
+        Ok(user)
     }
 }
 

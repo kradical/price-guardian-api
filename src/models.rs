@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use diesel::{Insertable, Queryable};
 use juniper::{GraphQLInputObject, GraphQLObject};
 
@@ -7,10 +8,9 @@ use crate::schema::users;
 pub struct User {
     pub id: i32,
     pub email: String,
-    // TODO: deal with these fields
-    // pub password: String,
-    // pub created_at: String,
-    // pub updated_at: String,
+    pub password: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Insertable, GraphQLInputObject)]

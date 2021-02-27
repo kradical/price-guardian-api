@@ -1,11 +1,21 @@
-use argonautica::Hasher;
+use argonautica::{Hasher, Verifier};
 use chrono::{DateTime, Utc};
-use diesel::{Insertable, Queryable};
+use diesel::{Identifiable, Insertable, Queryable};
 use juniper::{GraphQLInputObject, GraphQLObject};
 use std::env;
 use validator::Validate;
 
 use crate::schema::users;
+
+#[derive(Identifiable, Queryable)]
+#[table_name = "users"]
+pub struct UserWithPassword {
+    pub id: i32,
+    pub email: String,
+    pub password: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
 
 #[derive(Queryable, GraphQLObject)]
 pub struct User {
@@ -31,5 +41,16 @@ pub fn hash_password(password: &str) -> String {
         .with_password(password)
         .with_secret_key(secret_key)
         .hash()
+        .unwrap()
+}
+
+pub fn verify_password(password: &str, hash: &str) -> bool {
+    let secret_key = env::var("SECRET_KEY").expect("SECRET_KEY must be set");
+    let mut verifier = Verifier::default();
+    verifier
+        .with_password(password)
+        .with_hash(hash)
+        .with_secret_key(secret_key)
+        .verify()
         .unwrap()
 }

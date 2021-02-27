@@ -1,6 +1,8 @@
 use actix_web::web;
 use diesel::prelude::*;
-use juniper::{graphql_object, EmptySubscription, GraphQLObject, GraphQLUnion, RootNode};
+use juniper::{
+    graphql_object, EmptySubscription, FieldResult, GraphQLObject, GraphQLUnion, RootNode,
+};
 use validator::Validate;
 
 use crate::db::PgPool;
@@ -65,36 +67,51 @@ pub enum NewUserResult {
     Err(ValidationErrors),
 }
 
+fn get_user_duplicate_error() -> ValidationError {
+    ValidationError {
+        field: "email".to_string(),
+        code: "email_duplicate".to_string(),
+        message: "a user already exists with this email".to_string(),
+    }
+}
+
 pub struct Mutation;
 #[graphql_object(context = Context)]
 impl Mutation {
-    async fn createUser(context: &Context, new_user: NewUser) -> NewUserResult {
-        match new_user.validate() {
-            Ok(_) => (),
-            Err(e) => return NewUserResult::Err(ValidationErrors::new(e)),
-        };
-
+    async fn createUser(context: &Context, new_user: NewUser) -> FieldResult<NewUserResult> {
         use crate::schema::users::dsl::*;
 
-        let conn = context.db.get().expect("Error getting db connection");
+        match new_user.validate() {
+            Ok(_) => (),
+            Err(e) => return Ok(NewUserResult::Err(ValidationErrors::new(e))),
+        };
 
-        let user = web::block(move || -> Result<User, diesel::result::Error> {
+        let conn = context.db.get()?;
+
+        let create_user = move || -> Result<NewUserResult, diesel::result::Error> {
             let new_user_pw_hashed = NewUser {
                 password: hash_password(&new_user.password),
                 ..new_user
             };
-            let user_returning = (id, email, created_at, updated_at);
-            let user = diesel::insert_into(users)
+
+            let insert_result = diesel::insert_into(users)
                 .values(&new_user_pw_hashed)
-                .returning(user_returning)
-                .get_result(&conn)?;
+                .returning((id, email, created_at, updated_at))
+                .get_result(&conn);
 
-            Ok(user)
-        })
-        .await
-        .unwrap();
+            match insert_result {
+                Ok(user) => Ok(NewUserResult::Ok(user)),
+                Err(diesel::result::Error::DatabaseError(
+                    diesel::result::DatabaseErrorKind::UniqueViolation,
+                    _,
+                )) => Ok(NewUserResult::Err(ValidationErrors {
+                    errors: vec![get_user_duplicate_error()],
+                })),
+                Err(e) => Err(e),
+            }
+        };
 
-        NewUserResult::Ok(user)
+        Ok(web::block(create_user).await?)
     }
 }
 

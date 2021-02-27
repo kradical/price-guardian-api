@@ -8,3 +8,6 @@ CREATE TABLE users (
     updated_at timestamp with time zone NOT NULL DEFAULT NOW()
 );
 
+SELECT
+    diesel_manage_updated_at ('users');
+

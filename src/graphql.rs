@@ -1,13 +1,15 @@
 use actix_web::web;
 use diesel::prelude::*;
+use hex;
 use juniper::{
     graphql_object, EmptySubscription, FieldResult, GraphQLInputObject, GraphQLObject,
     GraphQLUnion, RootNode,
 };
+use rand::prelude::*;
 use validator::Validate;
 
 use crate::db::PgPool;
-use crate::models::{hash_password, verify_password, NewUser, User, UserWithPassword};
+use crate::models::{hash_password, verify_password, NewUser, SlimUser, TokenUser, User};
 
 #[derive(Clone)]
 pub struct Context {
@@ -53,7 +55,13 @@ impl ValidationErrors {
 
 #[derive(GraphQLUnion)]
 enum UserResult {
-    Ok(User),
+    Ok(SlimUser),
+    Err(ValidationErrors),
+}
+
+#[derive(GraphQLUnion)]
+enum TokenUserResult {
+    Ok(TokenUser),
     Err(ValidationErrors),
 }
 
@@ -83,14 +91,14 @@ impl Query {
         "0.1.0".to_string()
     }
 
-    async fn user(context: &Context, user_id: i32) -> FieldResult<User> {
+    async fn user(context: &Context, user_id: i32) -> FieldResult<SlimUser> {
         use crate::schema::users::dsl::*;
 
         let conn = context.db.get()?;
 
-        let find_user = move || -> Result<User, diesel::result::Error> {
+        let find_user = move || -> Result<SlimUser, diesel::result::Error> {
             users
-                .select((id, email, created_at, updated_at))
+                .select((id, created_at, updated_at, email))
                 .find(user_id)
                 .first(&conn)
         };
@@ -120,7 +128,7 @@ impl Mutation {
 
             let insert_result = diesel::insert_into(users)
                 .values(&new_user)
-                .returning((id, email, created_at, updated_at))
+                .returning((id, created_at, updated_at, email))
                 .get_result(&conn);
 
             match insert_result {
@@ -152,9 +160,9 @@ impl Mutation {
         let conn = context.db.get()?;
 
         let change_password = move || -> Result<UserResult, diesel::result::Error> {
-            let user_with_pw = users.find(input.id).first::<UserWithPassword>(&conn)?;
+            let user = users.find(input.id).first::<User>(&conn)?;
 
-            let is_valid = verify_password(&input.old_password, &user_with_pw.password);
+            let is_valid = verify_password(&input.old_password, &user.password);
 
             if !is_valid {
                 let err = ValidationError {
@@ -170,16 +178,56 @@ impl Mutation {
 
             let new_password = hash_password(&input.new_password);
 
-            let user = diesel::update(&user_with_pw)
+            let slim_user = diesel::update(&user)
                 .set(password.eq(new_password))
-                .returning((id, email, created_at, updated_at))
-                .get_result::<User>(&conn)?;
+                .returning((id, created_at, updated_at, email))
+                .get_result::<SlimUser>(&conn)?;
 
-            // Ok(UserResult::Ok(user))
-            Ok(UserResult::Ok(user))
+            Ok(UserResult::Ok(slim_user))
         };
 
         Ok(web::block(change_password).await?)
+    }
+
+    async fn login(context: &Context, input: NewUser) -> FieldResult<TokenUserResult> {
+        use crate::schema::users::dsl::*;
+
+        let conn = context.db.get()?;
+
+        let login = move || -> Result<TokenUserResult, diesel::result::Error> {
+            let user = users.filter(email.eq(input.email)).first::<User>(&conn)?;
+
+            let is_valid = verify_password(&input.password, &user.password);
+
+            if !is_valid {
+                let err = ValidationError {
+                    field: "password".to_string(),
+                    code: "authentication_error".to_string(),
+                    message: "incorrect credentials".to_string(),
+                };
+
+                let errs = ValidationErrors { errors: vec![err] };
+
+                return Ok(TokenUserResult::Err(errs));
+            }
+
+            // Share the same token across clients
+            if let Some(_) = user.session_token {
+                return Ok(TokenUserResult::Ok(TokenUser::from(user)));
+            }
+
+            let random_bytes = thread_rng().gen::<[u8; 20]>();
+            let token = hex::encode(random_bytes);
+
+            let token_user = diesel::update(&user)
+                .set(session_token.eq(token))
+                .returning((id, created_at, updated_at, email, session_token))
+                .get_result::<TokenUser>(&conn)?;
+
+            Ok(TokenUserResult::Ok(token_user))
+        };
+
+        Ok(web::block(login).await?)
     }
 }
 

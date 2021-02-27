@@ -21,6 +21,10 @@ Some example apps:
 - https://github.com/jamesjmeyer210/actix_sqlx_mysql_user_crud
 - https://github.com/marcusradell/monadium
 
+General todos:
+
+- logging
+
 # Setup Instructions
 
 Instructions are for a debian linux environment.

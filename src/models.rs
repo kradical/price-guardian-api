@@ -8,21 +8,44 @@ use validator::Validate;
 use crate::schema::users;
 
 #[derive(Identifiable, Queryable)]
-#[table_name = "users"]
-pub struct UserWithPassword {
+pub struct User {
     pub id: i32,
-    pub email: String,
-    pub password: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub email: String,
+    pub password: String,
+    pub session_token: Option<String>,
+}
+
+#[derive(Identifiable, Queryable, GraphQLObject)]
+#[table_name = "users"]
+pub struct TokenUser {
+    pub id: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub email: String,
+    pub session_token: Option<String>,
+}
+
+impl From<User> for TokenUser {
+    fn from(user: User) -> TokenUser {
+        TokenUser {
+            id: user.id,
+            created_at: user.created_at,
+            updated_at: user.updated_at,
+            email: user.email,
+            session_token: user.session_token,
+        }
+    }
 }
 
 #[derive(Queryable, GraphQLObject)]
-pub struct User {
+#[graphql(name = "User")]
+pub struct SlimUser {
     pub id: i32,
-    pub email: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub email: String,
 }
 
 #[derive(Insertable, GraphQLInputObject, Validate)]

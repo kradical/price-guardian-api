@@ -13,17 +13,6 @@ pub struct Context {
     pub db: PgPool,
 }
 
-impl juniper::Context for Context {}
-
-// Queries represent the callable funcitons
-pub struct Query;
-#[graphql_object(context = Context)]
-impl Query {
-    fn apiVersion() -> String {
-        "0.1.0".to_string()
-    }
-}
-
 #[derive(GraphQLObject)]
 pub struct ValidationError {
     field: String,
@@ -72,6 +61,29 @@ fn get_user_duplicate_error() -> ValidationError {
         field: "email".to_string(),
         code: "email_duplicate".to_string(),
         message: "a user already exists with this email".to_string(),
+    }
+}
+
+impl juniper::Context for Context {}
+
+// Queries represent the callable funcitons
+pub struct Query;
+#[graphql_object(context = Context)]
+impl Query {
+    fn apiVersion() -> String {
+        "0.1.0".to_string()
+    }
+
+    fn user(context: &Context, user_id: i32) -> FieldResult<User> {
+        use crate::schema::users::dsl::*;
+
+        let conn = context.db.get()?;
+        let find_result = users
+            .select((id, email, created_at, updated_at))
+            .find(user_id)
+            .first(&conn);
+
+        Ok(find_result?)
     }
 }
 

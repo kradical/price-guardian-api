@@ -61,5 +61,5 @@ async fn main() -> std::io::Result<()> {
     let bind = "127.0.0.1:8080";
     println!("Starting server at: {}", &bind);
 
-    server.bind(bind).unwrap().run().await
+    server.bind(bind)?.run().await
 }

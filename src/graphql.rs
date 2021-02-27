@@ -74,16 +74,19 @@ impl Query {
         "0.1.0".to_string()
     }
 
-    fn user(context: &Context, user_id: i32) -> FieldResult<User> {
+    async fn user(context: &Context, user_id: i32) -> FieldResult<User> {
         use crate::schema::users::dsl::*;
 
         let conn = context.db.get()?;
-        let find_result = users
-            .select((id, email, created_at, updated_at))
-            .find(user_id)
-            .first(&conn);
 
-        Ok(find_result?)
+        let find_user = move || -> Result<User, diesel::result::Error> {
+            users
+                .select((id, email, created_at, updated_at))
+                .find(user_id)
+                .first(&conn)
+        };
+
+        Ok(web::block(find_user).await?)
     }
 }
 

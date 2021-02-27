@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use diesel::{Insertable, Queryable};
 use juniper::{GraphQLInputObject, GraphQLObject};
 use std::env;
+use validator::Validate;
 
 use crate::schema::users;
 
@@ -14,10 +15,12 @@ pub struct User {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Insertable, GraphQLInputObject)]
+#[derive(Insertable, GraphQLInputObject, Validate)]
 #[table_name = "users"]
 pub struct NewUser {
+    #[validate(email(message = "email is invalid"))]
     pub email: String,
+    #[validate(length(min = 8, message = "password must be at least 8 characters"))]
     pub password: String,
 }
 

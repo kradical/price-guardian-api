@@ -17,7 +17,7 @@ Track prices and notify if price drops so you can get your well deserved refund 
 
 Some example apps:
 
-- https://github.com/nemesiscodex/actix-blog-app/tree/master/src
+- https://github.com/nemesiscodex/actix-blog-app
 - https://github.com/jamesjmeyer210/actix_sqlx_mysql_user_crud
 - https://github.com/marcusradell/monadium
 

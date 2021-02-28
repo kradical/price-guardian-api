@@ -1,15 +1,13 @@
 use actix_web::web;
 use diesel::prelude::*;
-use hex;
 use juniper::{
     graphql_object, EmptySubscription, FieldResult, GraphQLInputObject, GraphQLObject,
     GraphQLUnion, RootNode,
 };
-use rand::prelude::*;
 use validator::Validate;
 
 use crate::db::PgPool;
-use crate::models::{hash_password, verify_password, NewUser, SlimUser, TokenUser, User};
+use crate::models::{hash_password, verify_password, NewUser, Session, NewSession, FullUser, User};
 
 pub struct Context {
     pub db: PgPool,
@@ -55,13 +53,13 @@ impl ValidationErrors {
 
 #[derive(GraphQLUnion)]
 enum UserResult {
-    Ok(SlimUser),
+    Ok(User),
     Err(ValidationErrors),
 }
 
 #[derive(GraphQLUnion)]
-enum TokenUserResult {
-    Ok(TokenUser),
+enum SessionResult {
+    Ok(Session),
     Err(ValidationErrors),
 }
 
@@ -91,12 +89,12 @@ impl Query {
         "0.1.0".to_string()
     }
 
-    async fn user(context: &Context, user_id: i32) -> FieldResult<SlimUser> {
+    async fn user(context: &Context, user_id: i32) -> FieldResult<User> {
         use crate::schema::users::dsl::*;
 
         let conn = context.db.get()?;
 
-        let find_user = move || -> Result<SlimUser, diesel::result::Error> {
+        let find_user = move || -> Result<User, diesel::result::Error> {
             users
                 .select((id, created_at, updated_at, email))
                 .find(user_id)
@@ -160,7 +158,7 @@ impl Mutation {
         let conn = context.db.get()?;
 
         let change_password = move || -> Result<UserResult, diesel::result::Error> {
-            let user = users.find(input.id).first::<User>(&conn)?;
+            let user = users.find(input.id).first::<FullUser>(&conn)?;
 
             let is_valid = verify_password(&input.old_password, &user.password);
 
@@ -181,7 +179,7 @@ impl Mutation {
             let slim_user = diesel::update(&user)
                 .set(password.eq(new_password))
                 .returning((id, created_at, updated_at, email))
-                .get_result::<SlimUser>(&conn)?;
+                .get_result::<User>(&conn)?;
 
             Ok(UserResult::Ok(slim_user))
         };
@@ -189,13 +187,15 @@ impl Mutation {
         Ok(web::block(change_password).await?)
     }
 
-    async fn login(context: &Context, input: NewUser) -> FieldResult<TokenUserResult> {
-        use crate::schema::users::dsl::*;
+    async fn login(context: &Context, input: NewUser) -> FieldResult<SessionResult> {
+        use crate::schema::{users, sessions};
 
         let conn = context.db.get()?;
 
-        let login = move || -> Result<TokenUserResult, diesel::result::Error> {
-            let user = users.filter(email.eq(input.email)).first::<User>(&conn)?;
+        let login = move || -> Result<SessionResult, diesel::result::Error> {
+            let user = users::table
+                .filter(users::email.eq(input.email))
+                .first::<FullUser>(&conn)?;
 
             let is_valid = verify_password(&input.password, &user.password);
 
@@ -208,23 +208,16 @@ impl Mutation {
 
                 let errs = ValidationErrors { errors: vec![err] };
 
-                return Ok(TokenUserResult::Err(errs));
+                return Ok(SessionResult::Err(errs));
             }
 
-            // Share the same token across clients
-            if let Some(_) = user.session_token {
-                return Ok(TokenUserResult::Ok(TokenUser::from(user)));
-            }
+            let new_session = NewSession { user_id: user.id };
 
-            let random_bytes = thread_rng().gen::<[u8; 20]>();
-            let token = hex::encode(random_bytes);
+            let session = diesel::insert_into(sessions::table)
+                .values(&new_session)
+                .get_result::<Session>(&conn)?;
 
-            let token_user = diesel::update(&user)
-                .set(session_token.eq(token))
-                .returning((id, created_at, updated_at, email, session_token))
-                .get_result::<TokenUser>(&conn)?;
-
-            Ok(TokenUserResult::Ok(token_user))
+            Ok(SessionResult::Ok(session))
         };
 
         Ok(web::block(login).await?)

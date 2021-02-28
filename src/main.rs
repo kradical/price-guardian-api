@@ -13,6 +13,7 @@ use futures::{
     future::{ok, Ready},
 };
 use juniper_actix::{graphiql_handler, graphql_handler, playground_handler};
+use uuid::Uuid;
 
 mod db;
 mod graphql;
@@ -55,29 +56,36 @@ impl FromRequest for graphql::Context {
     }
 }
 
-fn parse_bearer_token(req: &HttpRequest) -> Option<String> {
+fn parse_bearer_token(req: &HttpRequest) -> Option<Uuid> {
     let header = req.headers().get("Authorization")?;
     let header_str = header.to_str().ok()?;
 
     header_str
         .to_lowercase()
         .starts_with("bearer")
-        .then(|| header_str[6..header_str.len()].trim().to_string())
+        .then(|| header_str[6..header_str.len()].trim())
+        .and_then(|s| Uuid::parse_str(s).ok())
 }
 
 async fn get_current_user(req: &HttpRequest, conn: db::PgPooledConnection) -> Option<models::User> {
-    use crate::schema::users::dsl::*;
+    use crate::schema::{sessions, users};
 
     let token = match parse_bearer_token(&req) {
         Some(v) => v,
         None => return None,
     };
 
-    web::block(move || -> Result<models::User, ()> {
-        users
-            .filter(session_token.eq(token))
-            .first::<models::User>(&conn)
-            .map_err(|_e| ())
+    web::block(move || -> Result<models::User, diesel::result::Error> {
+        users::table
+            .select((
+                users::id,
+                users::created_at,
+                users::updated_at,
+                users::email,
+            ))
+            .inner_join(sessions::table)
+            .filter(sessions::id.eq(token))
+            .get_result::<models::User>(&conn)
     })
     .await
     .ok()

@@ -3,45 +3,23 @@ use chrono::{DateTime, Utc};
 use diesel::{Identifiable, Insertable, Queryable};
 use juniper::{GraphQLInputObject, GraphQLObject};
 use std::env;
+use uuid::Uuid;
 use validator::Validate;
 
-use crate::schema::users;
+use crate::schema::{sessions, users};
 
 #[derive(Debug, Clone, Identifiable, Queryable)]
-pub struct User {
+#[table_name = "users"]
+pub struct FullUser {
     pub id: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub email: String,
     pub password: String,
-    pub session_token: Option<String>,
-}
-
-#[derive(Debug, Identifiable, Queryable, GraphQLObject)]
-#[table_name = "users"]
-pub struct TokenUser {
-    pub id: i32,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub email: String,
-    pub session_token: Option<String>,
-}
-
-impl From<User> for TokenUser {
-    fn from(user: User) -> TokenUser {
-        TokenUser {
-            id: user.id,
-            created_at: user.created_at,
-            updated_at: user.updated_at,
-            email: user.email,
-            session_token: user.session_token,
-        }
-    }
 }
 
 #[derive(Debug, Queryable, GraphQLObject)]
-#[graphql(name = "User")]
-pub struct SlimUser {
+pub struct User {
     pub id: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -55,6 +33,19 @@ pub struct NewUser {
     pub email: String,
     #[validate(length(min = 8, message = "password must be at least 8 characters"))]
     pub password: String,
+}
+
+#[derive(Debug, Queryable, GraphQLObject)]
+pub struct Session {
+    pub id: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub user_id: i32,
+}
+
+#[derive(Debug, Insertable)]
+#[table_name = "sessions"]
+pub struct NewSession {
+    pub user_id: i32,
 }
 
 pub fn hash_password(password: &str) -> String {

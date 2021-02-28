@@ -1,4 +1,0 @@
-DROP TABLE users;
-
-DROP EXTENSION citext;
-

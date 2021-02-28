@@ -22,7 +22,7 @@ Some example apps:
 - https://github.com/marcusradell/monadium
 
 General todos:
-
+- "logout" of a certain session mutation
 - logging
 
 # Setup Instructions

@@ -11,9 +11,9 @@ use validator::Validate;
 use crate::db::PgPool;
 use crate::models::{hash_password, verify_password, NewUser, SlimUser, TokenUser, User};
 
-#[derive(Clone)]
 pub struct Context {
     pub db: PgPool,
+    pub user: Option<User>,
 }
 
 #[derive(GraphQLObject)]

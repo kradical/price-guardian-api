@@ -7,7 +7,7 @@ use validator::Validate;
 
 use crate::schema::users;
 
-#[derive(Identifiable, Queryable)]
+#[derive(Debug, Clone, Identifiable, Queryable)]
 pub struct User {
     pub id: i32,
     pub created_at: DateTime<Utc>,
@@ -17,7 +17,7 @@ pub struct User {
     pub session_token: Option<String>,
 }
 
-#[derive(Identifiable, Queryable, GraphQLObject)]
+#[derive(Debug, Identifiable, Queryable, GraphQLObject)]
 #[table_name = "users"]
 pub struct TokenUser {
     pub id: i32,
@@ -39,7 +39,7 @@ impl From<User> for TokenUser {
     }
 }
 
-#[derive(Queryable, GraphQLObject)]
+#[derive(Debug, Queryable, GraphQLObject)]
 #[graphql(name = "User")]
 pub struct SlimUser {
     pub id: i32,
@@ -48,7 +48,7 @@ pub struct SlimUser {
     pub email: String,
 }
 
-#[derive(Insertable, GraphQLInputObject, Validate)]
+#[derive(Debug, Insertable, GraphQLInputObject, Validate)]
 #[table_name = "users"]
 pub struct NewUser {
     #[validate(email(message = "email is invalid"))]

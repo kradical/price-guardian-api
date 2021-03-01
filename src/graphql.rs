@@ -4,14 +4,35 @@ use juniper::{
     graphql_object, EmptySubscription, FieldResult, GraphQLInputObject, GraphQLObject,
     GraphQLUnion, RootNode,
 };
+use uuid::Uuid;
 use validator::Validate;
 
 use crate::db::PgPool;
-use crate::models::{hash_password, verify_password, NewUser, Session, NewSession, FullUser, User};
+use crate::models::{hash_password, verify_password, FullUser, NewSession, NewUser, Session, User};
 
 pub struct Context {
     pub db: PgPool,
     pub user: Option<User>,
+}
+
+#[derive(GraphQLInputObject)]
+struct SessionIdInput {
+    id: Uuid,
+}
+
+#[derive(GraphQLObject)]
+struct SessionIdOutput {
+    id: Uuid,
+}
+
+#[derive(GraphQLInputObject)]
+struct UserIdInput {
+    id: i32,
+}
+
+#[derive(GraphQLObject)]
+struct UserIdOutput {
+    id: i32,
 }
 
 #[derive(GraphQLObject)]
@@ -144,6 +165,22 @@ impl Mutation {
         Ok(web::block(create_user).await?)
     }
 
+    async fn deleteUser(context: &Context, input: UserIdInput) -> FieldResult<UserIdOutput> {
+        use crate::schema::users::dsl::*;
+
+        let conn = context.db.get()?;
+
+        let user_id = input.id;
+
+        let delete = move || -> Result<usize, diesel::result::Error> {
+            diesel::delete(users.filter(id.eq(user_id))).execute(&conn)
+        };
+
+        web::block(delete).await?;
+
+        Ok(UserIdOutput { id: user_id })
+    }
+
     async fn changePassword(
         context: &Context,
         input: ChangePasswordUser,
@@ -188,7 +225,7 @@ impl Mutation {
     }
 
     async fn login(context: &Context, input: NewUser) -> FieldResult<SessionResult> {
-        use crate::schema::{users, sessions};
+        use crate::schema::{sessions, users};
 
         let conn = context.db.get()?;
 
@@ -221,6 +258,22 @@ impl Mutation {
         };
 
         Ok(web::block(login).await?)
+    }
+
+    async fn logout(context: &Context, input: SessionIdInput) -> FieldResult<SessionIdOutput> {
+        use crate::schema::sessions::dsl::*;
+
+        let conn = context.db.get()?;
+
+        let session_id = input.id;
+
+        let logout = move || -> Result<usize, diesel::result::Error> {
+            diesel::delete(sessions.filter(id.eq(session_id))).execute(&conn)
+        };
+
+        web::block(logout).await?;
+
+        Ok(SessionIdOutput { id: session_id })
     }
 }
 

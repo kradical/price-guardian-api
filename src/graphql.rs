@@ -50,19 +50,33 @@ impl Default for AuthenticationError {
 }
 
 #[derive(GraphQLObject)]
-struct ValidationError {
+struct PermissionError {
+    code: String,
+    message: String,
+}
+impl Default for PermissionError {
+    fn default() -> Self {
+        PermissionError {
+            code: "permission_error".to_string(),
+            message: "Permission denied".to_string(),
+        }
+    }
+}
+
+#[derive(GraphQLObject)]
+struct FieldError {
     field: String,
     code: String,
     message: String,
 }
 
 #[derive(GraphQLObject)]
-struct ValidationErrors {
-    errors: Vec<ValidationError>,
+struct ValidationError {
+    errors: Vec<FieldError>,
 }
 
-impl ValidationErrors {
-    fn new(validation_errors: validator::ValidationErrors) -> ValidationErrors {
+impl ValidationError {
+    fn new(validation_errors: validator::ValidationErrors) -> ValidationError {
         let errors = validation_errors
             .field_errors()
             .iter()
@@ -73,7 +87,7 @@ impl ValidationErrors {
                         None => "".to_string(),
                     };
 
-                    ValidationError {
+                    FieldError {
                         field: field.to_string(),
                         code: err.code.to_string(),
                         message,
@@ -82,33 +96,36 @@ impl ValidationErrors {
             })
             .collect();
 
-        ValidationErrors { errors }
+        ValidationError { errors }
     }
 }
 
 #[derive(GraphQLUnion)]
 enum UserResponse {
     User(User),
-    ValidationError(ValidationErrors),
+    ValidationError(ValidationError),
     AuthenticationError(AuthenticationError),
+    PermissionError(PermissionError),
 }
 
 #[derive(GraphQLUnion)]
 enum UserIdResponse {
     UserIdOutput(UserIdOutput),
     AuthenticationError(AuthenticationError),
+    PermissionError(PermissionError),
 }
 
 #[derive(GraphQLUnion)]
 enum SessionIdResponse {
     SessionIdOutput(SessionIdOutput),
     AuthenticationError(AuthenticationError),
+    PermissionError(PermissionError),
 }
 
 #[derive(GraphQLUnion)]
-enum SessionResult {
-    Ok(Session),
-    Err(ValidationErrors),
+enum SessionResponse {
+    Session(Session),
+    ValidationError(ValidationError),
 }
 
 #[derive(GraphQLInputObject, Validate)]
@@ -119,8 +136,8 @@ struct ChangePasswordUser {
     pub new_password: String,
 }
 
-fn get_user_duplicate_error() -> ValidationError {
-    ValidationError {
+fn get_user_duplicate_error() -> FieldError {
+    FieldError {
         field: "email".to_string(),
         code: "email_duplicate".to_string(),
         message: "a user already exists with this email".to_string(),
@@ -137,15 +154,17 @@ impl Query {
         "0.1.0".to_string()
     }
 
-    async fn user(context: &Context, user_id: i32) -> FieldResult<UserResponse> {
+    async fn user(ctx: &Context, user_id: i32) -> FieldResult<UserResponse> {
         use crate::schema::users::dsl::*;
 
-        // Authenticate user
-        if context.user.is_none() {
-            return Ok(UserResponse::AuthenticationError(Default::default()));
-        }
+        // Authn and Authz
+        match ctx.user.as_ref() {
+            Some(v) if v.id == user_id => (),
+            Some(_) => return Ok(UserResponse::PermissionError(Default::default())),
+            None => return Ok(UserResponse::AuthenticationError(Default::default())),
+        };
 
-        let conn = context.db.get()?;
+        let conn = ctx.db.get()?;
 
         let find_user = move || -> Result<User, diesel::result::Error> {
             users
@@ -161,15 +180,15 @@ impl Query {
 pub struct Mutation;
 #[graphql_object(context = Context)]
 impl Mutation {
-    async fn createUser(context: &Context, input: NewUser) -> FieldResult<UserResponse> {
+    async fn createUser(ctx: &Context, input: NewUser) -> FieldResult<UserResponse> {
         use crate::schema::users::dsl::*;
 
         match input.validate() {
             Ok(_) => (),
-            Err(e) => return Ok(UserResponse::ValidationError(ValidationErrors::new(e))),
+            Err(e) => return Ok(UserResponse::ValidationError(ValidationError::new(e))),
         };
 
-        let conn = context.db.get()?;
+        let conn = ctx.db.get()?;
 
         let create_user = move || -> Result<UserResponse, diesel::result::Error> {
             let new_user = NewUser {
@@ -187,7 +206,7 @@ impl Mutation {
                 Err(diesel::result::Error::DatabaseError(
                     diesel::result::DatabaseErrorKind::UniqueViolation,
                     _,
-                )) => Ok(UserResponse::ValidationError(ValidationErrors {
+                )) => Ok(UserResponse::ValidationError(ValidationError {
                     errors: vec![get_user_duplicate_error()],
                 })),
                 Err(e) => Err(e),
@@ -197,15 +216,17 @@ impl Mutation {
         Ok(web::block(create_user).await?)
     }
 
-    async fn deleteUser(context: &Context, input: UserIdInput) -> FieldResult<UserIdResponse> {
+    async fn deleteUser(ctx: &Context, input: UserIdInput) -> FieldResult<UserIdResponse> {
         use crate::schema::users::dsl::*;
 
-        // Authenticate user
-        if context.user.is_none() {
-            return Ok(UserIdResponse::AuthenticationError(Default::default()));
-        }
+        // Authn and Authz
+        match ctx.user.as_ref() {
+            Some(u) if u.id == input.id => (),
+            Some(_) => return Ok(UserIdResponse::PermissionError(Default::default())),
+            None => return Ok(UserIdResponse::AuthenticationError(Default::default())),
+        };
 
-        let conn = context.db.get()?;
+        let conn = ctx.db.get()?;
 
         let user_id = input.id;
 
@@ -218,23 +239,22 @@ impl Mutation {
         Ok(UserIdResponse::UserIdOutput(UserIdOutput { id: user_id }))
     }
 
-    async fn changePassword(
-        context: &Context,
-        input: ChangePasswordUser,
-    ) -> FieldResult<UserResponse> {
+    async fn changePassword(ctx: &Context, input: ChangePasswordUser) -> FieldResult<UserResponse> {
         use crate::schema::users::dsl::*;
 
-        // Authenticate user
-        if context.user.is_none() {
-            return Ok(UserResponse::AuthenticationError(Default::default()));
-        }
+        // Authn and Authz
+        match ctx.user.as_ref() {
+            Some(u) if u.id == input.id => (),
+            Some(_) => return Ok(UserResponse::PermissionError(Default::default())),
+            None => return Ok(UserResponse::AuthenticationError(Default::default())),
+        };
 
         match input.validate() {
             Ok(_) => (),
-            Err(e) => return Ok(UserResponse::ValidationError(ValidationErrors::new(e))),
+            Err(e) => return Ok(UserResponse::ValidationError(ValidationError::new(e))),
         };
 
-        let conn = context.db.get()?;
+        let conn = ctx.db.get()?;
 
         let change_password = move || -> Result<UserResponse, diesel::result::Error> {
             let user = users.find(input.id).first::<FullUser>(&conn)?;
@@ -242,13 +262,13 @@ impl Mutation {
             let is_valid = verify_password(&input.old_password, &user.password);
 
             if !is_valid {
-                let err = ValidationError {
+                let err = FieldError {
                     field: "old_password".to_string(),
                     code: "old_password_incorrect".to_string(),
                     message: "incorrect old password".to_string(),
                 };
 
-                let errs = ValidationErrors { errors: vec![err] };
+                let errs = ValidationError { errors: vec![err] };
 
                 return Ok(UserResponse::ValidationError(errs));
             }
@@ -266,12 +286,12 @@ impl Mutation {
         Ok(web::block(change_password).await?)
     }
 
-    async fn login(context: &Context, input: NewUser) -> FieldResult<SessionResult> {
+    async fn login(ctx: &Context, input: NewUser) -> FieldResult<SessionResponse> {
         use crate::schema::{sessions, users};
 
-        let conn = context.db.get()?;
+        let conn = ctx.db.get()?;
 
-        let login = move || -> Result<SessionResult, diesel::result::Error> {
+        let login = move || -> Result<SessionResponse, diesel::result::Error> {
             let user = users::table
                 .filter(users::email.eq(input.email))
                 .first::<FullUser>(&conn)?;
@@ -279,15 +299,15 @@ impl Mutation {
             let is_valid = verify_password(&input.password, &user.password);
 
             if !is_valid {
-                let err = ValidationError {
+                let err = FieldError {
                     field: "password".to_string(),
                     code: "authentication_error".to_string(),
                     message: "incorrect credentials".to_string(),
                 };
 
-                let errs = ValidationErrors { errors: vec![err] };
+                let errs = ValidationError { errors: vec![err] };
 
-                return Ok(SessionResult::Err(errs));
+                return Ok(SessionResponse::ValidationError(errs));
             }
 
             let new_session = NewSession { user_id: user.id };
@@ -296,33 +316,45 @@ impl Mutation {
                 .values(&new_session)
                 .get_result::<Session>(&conn)?;
 
-            Ok(SessionResult::Ok(session))
+            Ok(SessionResponse::Session(session))
         };
 
         Ok(web::block(login).await?)
     }
 
-    async fn logout(context: &Context, input: SessionIdInput) -> FieldResult<SessionIdResponse> {
+    async fn logout(ctx: &Context, input: SessionIdInput) -> FieldResult<SessionIdResponse> {
         use crate::schema::sessions::dsl::*;
 
-        // Authenticate user
-        if context.user.is_none() {
-            return Ok(SessionIdResponse::AuthenticationError(Default::default()));
-        }
-
-        let conn = context.db.get()?;
-
-        let session_id = input.id;
-
-        let logout = move || -> Result<usize, diesel::result::Error> {
-            diesel::delete(sessions.filter(id.eq(session_id))).execute(&conn)
+        // Authn
+        let current_user = match ctx.user.as_ref() {
+            Some(u) => u,
+            None => return Ok(SessionIdResponse::AuthenticationError(Default::default())),
         };
 
-        web::block(logout).await?;
+        let conn = ctx.db.get()?;
+        let session_id = input.id;
+        let current_user_id = current_user.id;
 
-        Ok(SessionIdResponse::SessionIdOutput(SessionIdOutput {
-            id: session_id,
-        }))
+        let logout = move || -> Result<SessionIdResponse, diesel::result::Error> {
+            let session = sessions
+                .select((id, created_at, user_id))
+                .find(session_id)
+                .first::<Session>(&conn)?;
+
+            // TODO: rewrite authz so its more of a "get entity, check perms" flow
+            // Authz
+            if session.user_id != current_user_id {
+                return Ok(SessionIdResponse::PermissionError(Default::default()));
+            }
+
+            diesel::delete(sessions.filter(id.eq(session_id))).execute(&conn)?;
+
+            Ok(SessionIdResponse::SessionIdOutput(SessionIdOutput {
+                id: session_id,
+            }))
+        };
+
+        Ok(web::block(logout).await?)
     }
 }
 

@@ -23,12 +23,10 @@ Some example apps:
 
 General todos:
 
-- add authn / authz permissions
-  - can only access things with your user_id
-  - OR admin users can do anything
-- pull things into "actions" / "repositories" for a bit better organization
 - add Item model
   - The "thing" we want to track price on and notify if it drops
+- add "admin" user
+- pull things into "actions" / "repositories" for a bit better organization
 - reset password flow
 - logging
 

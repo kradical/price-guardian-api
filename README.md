@@ -22,7 +22,14 @@ Some example apps:
 - https://github.com/marcusradell/monadium
 
 General todos:
-- "logout" of a certain session mutation
+
+- add authn / authz permissions
+  - can only access things with your user_id
+  - OR admin users can do anything
+- pull things into "actions" / "repositories" for a bit better organization
+- add Item model
+  - The "thing" we want to track price on and notify if it drops
+- reset password flow
 - logging
 
 # Setup Instructions

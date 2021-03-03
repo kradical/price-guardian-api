@@ -36,6 +36,20 @@ struct UserIdOutput {
 }
 
 #[derive(GraphQLObject)]
+struct AuthenticationError {
+    code: String,
+    message: String,
+}
+impl Default for AuthenticationError {
+    fn default() -> Self {
+        AuthenticationError {
+            code: "authentication_error".to_string(),
+            message: "Authenticated user required".to_string(),
+        }
+    }
+}
+
+#[derive(GraphQLObject)]
 struct ValidationError {
     field: String,
     code: String,
@@ -73,9 +87,22 @@ impl ValidationErrors {
 }
 
 #[derive(GraphQLUnion)]
-enum UserResult {
-    Ok(User),
-    Err(ValidationErrors),
+enum UserResponse {
+    User(User),
+    ValidationError(ValidationErrors),
+    AuthenticationError(AuthenticationError),
+}
+
+#[derive(GraphQLUnion)]
+enum UserIdResponse {
+    UserIdOutput(UserIdOutput),
+    AuthenticationError(AuthenticationError),
+}
+
+#[derive(GraphQLUnion)]
+enum SessionIdResponse {
+    SessionIdOutput(SessionIdOutput),
+    AuthenticationError(AuthenticationError),
 }
 
 #[derive(GraphQLUnion)]
@@ -110,8 +137,13 @@ impl Query {
         "0.1.0".to_string()
     }
 
-    async fn user(context: &Context, user_id: i32) -> FieldResult<User> {
+    async fn user(context: &Context, user_id: i32) -> FieldResult<UserResponse> {
         use crate::schema::users::dsl::*;
+
+        // Authenticate user
+        if context.user.is_none() {
+            return Ok(UserResponse::AuthenticationError(Default::default()));
+        }
 
         let conn = context.db.get()?;
 
@@ -122,24 +154,24 @@ impl Query {
                 .first(&conn)
         };
 
-        Ok(web::block(find_user).await?)
+        Ok(UserResponse::User(web::block(find_user).await?))
     }
 }
 
 pub struct Mutation;
 #[graphql_object(context = Context)]
 impl Mutation {
-    async fn createUser(context: &Context, input: NewUser) -> FieldResult<UserResult> {
+    async fn createUser(context: &Context, input: NewUser) -> FieldResult<UserResponse> {
         use crate::schema::users::dsl::*;
 
         match input.validate() {
             Ok(_) => (),
-            Err(e) => return Ok(UserResult::Err(ValidationErrors::new(e))),
+            Err(e) => return Ok(UserResponse::ValidationError(ValidationErrors::new(e))),
         };
 
         let conn = context.db.get()?;
 
-        let create_user = move || -> Result<UserResult, diesel::result::Error> {
+        let create_user = move || -> Result<UserResponse, diesel::result::Error> {
             let new_user = NewUser {
                 password: hash_password(&input.password),
                 ..input
@@ -151,11 +183,11 @@ impl Mutation {
                 .get_result(&conn);
 
             match insert_result {
-                Ok(user) => Ok(UserResult::Ok(user)),
+                Ok(user) => Ok(UserResponse::User(user)),
                 Err(diesel::result::Error::DatabaseError(
                     diesel::result::DatabaseErrorKind::UniqueViolation,
                     _,
-                )) => Ok(UserResult::Err(ValidationErrors {
+                )) => Ok(UserResponse::ValidationError(ValidationErrors {
                     errors: vec![get_user_duplicate_error()],
                 })),
                 Err(e) => Err(e),
@@ -165,8 +197,13 @@ impl Mutation {
         Ok(web::block(create_user).await?)
     }
 
-    async fn deleteUser(context: &Context, input: UserIdInput) -> FieldResult<UserIdOutput> {
+    async fn deleteUser(context: &Context, input: UserIdInput) -> FieldResult<UserIdResponse> {
         use crate::schema::users::dsl::*;
+
+        // Authenticate user
+        if context.user.is_none() {
+            return Ok(UserIdResponse::AuthenticationError(Default::default()));
+        }
 
         let conn = context.db.get()?;
 
@@ -178,23 +215,28 @@ impl Mutation {
 
         web::block(delete).await?;
 
-        Ok(UserIdOutput { id: user_id })
+        Ok(UserIdResponse::UserIdOutput(UserIdOutput { id: user_id }))
     }
 
     async fn changePassword(
         context: &Context,
         input: ChangePasswordUser,
-    ) -> FieldResult<UserResult> {
+    ) -> FieldResult<UserResponse> {
         use crate::schema::users::dsl::*;
+
+        // Authenticate user
+        if context.user.is_none() {
+            return Ok(UserResponse::AuthenticationError(Default::default()));
+        }
 
         match input.validate() {
             Ok(_) => (),
-            Err(e) => return Ok(UserResult::Err(ValidationErrors::new(e))),
+            Err(e) => return Ok(UserResponse::ValidationError(ValidationErrors::new(e))),
         };
 
         let conn = context.db.get()?;
 
-        let change_password = move || -> Result<UserResult, diesel::result::Error> {
+        let change_password = move || -> Result<UserResponse, diesel::result::Error> {
             let user = users.find(input.id).first::<FullUser>(&conn)?;
 
             let is_valid = verify_password(&input.old_password, &user.password);
@@ -208,7 +250,7 @@ impl Mutation {
 
                 let errs = ValidationErrors { errors: vec![err] };
 
-                return Ok(UserResult::Err(errs));
+                return Ok(UserResponse::ValidationError(errs));
             }
 
             let new_password = hash_password(&input.new_password);
@@ -218,7 +260,7 @@ impl Mutation {
                 .returning((id, created_at, updated_at, email))
                 .get_result::<User>(&conn)?;
 
-            Ok(UserResult::Ok(slim_user))
+            Ok(UserResponse::User(slim_user))
         };
 
         Ok(web::block(change_password).await?)
@@ -260,8 +302,13 @@ impl Mutation {
         Ok(web::block(login).await?)
     }
 
-    async fn logout(context: &Context, input: SessionIdInput) -> FieldResult<SessionIdOutput> {
+    async fn logout(context: &Context, input: SessionIdInput) -> FieldResult<SessionIdResponse> {
         use crate::schema::sessions::dsl::*;
+
+        // Authenticate user
+        if context.user.is_none() {
+            return Ok(SessionIdResponse::AuthenticationError(Default::default()));
+        }
 
         let conn = context.db.get()?;
 
@@ -273,7 +320,9 @@ impl Mutation {
 
         web::block(logout).await?;
 
-        Ok(SessionIdOutput { id: session_id })
+        Ok(SessionIdResponse::SessionIdOutput(SessionIdOutput {
+            id: session_id,
+        }))
     }
 }
 

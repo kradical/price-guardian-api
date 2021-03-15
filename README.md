@@ -7,7 +7,7 @@ Track prices and notify if price drops so you can get your well deserved refund 
 - backend up and running locally
   - Rust, actix, juniper, diesel, postgres
 - frontend up and running locally
-  - svelte, graphql, a component lib? snow/webpack?
+  - svelte/sveltekit, graphql, a component lib (material svelte ?)
 - deploy backend
   - dockerize -> ecs
   - cloudformation to manage infra.. or terraform.. other tools?
@@ -28,7 +28,14 @@ General todos:
 - add "admin" user
 - pull things into "actions" / "repositories" for a bit better organization
 - reset password flow
+- confirm email flow
+  - remove permissions on unconfirmed email account ??
 - logging
+- add tests
+- add 2FA
+- add oauth signup / login (is amazon possible?? lookup popular options)
+- add price monitoring
+  - amazon first, or do they not have a policy?
 
 # Setup Instructions
 

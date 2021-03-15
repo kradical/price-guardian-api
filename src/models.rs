@@ -6,9 +6,9 @@ use std::env;
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::schema::{sessions, users};
+use crate::schema::{items, sessions, users};
 
-#[derive(Debug, Clone, Identifiable, Queryable)]
+#[derive(Clone, Identifiable, Queryable)]
 #[table_name = "users"]
 pub struct FullUser {
     pub id: i32,
@@ -18,7 +18,7 @@ pub struct FullUser {
     pub password: String,
 }
 
-#[derive(Debug, Queryable, GraphQLObject)]
+#[derive(Queryable, GraphQLObject)]
 pub struct User {
     pub id: i32,
     pub created_at: DateTime<Utc>,
@@ -26,7 +26,7 @@ pub struct User {
     pub email: String,
 }
 
-#[derive(Debug, Insertable, GraphQLInputObject, Validate)]
+#[derive(Insertable, GraphQLInputObject, Validate)]
 #[table_name = "users"]
 pub struct NewUser {
     #[validate(email(message = "email is invalid"))]
@@ -35,17 +35,37 @@ pub struct NewUser {
     pub password: String,
 }
 
-#[derive(Debug, Queryable, GraphQLObject)]
+#[derive(Queryable, GraphQLObject)]
 pub struct Session {
     pub id: Uuid,
     pub created_at: DateTime<Utc>,
     pub user_id: i32,
 }
 
-#[derive(Debug, Insertable)]
+#[derive(Insertable)]
 #[table_name = "sessions"]
 pub struct NewSession {
     pub user_id: i32,
+}
+
+#[derive(Queryable, GraphQLObject)]
+pub struct Item {
+    pub id: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub user_id: i32,
+    pub name: String,
+    pub price: i32,
+    pub protection_ends_at: DateTime<Utc>,
+}
+
+#[derive(Insertable)]
+#[table_name = "items"]
+pub struct NewItem {
+    pub user_id: i32,
+    pub name: String,
+    pub price: i32,
+    pub protection_ends_at: DateTime<Utc>,
 }
 
 pub fn hash_password(password: &str) -> String {

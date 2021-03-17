@@ -10,7 +10,7 @@ use validator::Validate;
 
 use crate::db::PgPool;
 use crate::models::{
-    hash_password, verify_password, FullUser, Item, NewSession, NewUser, Session, User,
+    hash_password, verify_password, FullUser, Item, NewItem, NewSession, NewUser, Session, User,
 };
 
 pub struct Context {
@@ -19,22 +19,22 @@ pub struct Context {
 }
 
 #[derive(GraphQLInputObject)]
-struct SessionIdInput {
+struct UuidInput {
     id: Uuid,
 }
 
 #[derive(GraphQLObject)]
-struct SessionIdOutput {
+struct UuidOutput {
     id: Uuid,
 }
 
 #[derive(GraphQLInputObject)]
-struct UserIdInput {
+struct IntIdInput {
     id: i32,
 }
 
 #[derive(GraphQLObject)]
-struct UserIdOutput {
+struct IntIdOutput {
     id: i32,
 }
 
@@ -162,15 +162,15 @@ enum UserResponse {
 }
 
 #[derive(GraphQLUnion)]
-enum UserIdResponse {
-    UserIdOutput(UserIdOutput),
+enum IntIdResponse {
+    IntIdOutput(IntIdOutput),
     AuthenticationError(AuthenticationError),
     PermissionError(PermissionError),
 }
 
 #[derive(GraphQLUnion)]
-enum SessionIdResponse {
-    SessionIdOutput(SessionIdOutput),
+enum UuidResponse {
+    UuidOutput(UuidOutput),
     AuthenticationError(AuthenticationError),
     PermissionError(PermissionError),
 }
@@ -187,6 +187,14 @@ struct ChangePasswordUser {
     pub old_password: String,
     #[validate(length(min = 8, message = "new password must be at least 8 characters"))]
     pub new_password: String,
+}
+
+#[derive(GraphQLUnion)]
+enum ItemResponse {
+    Item(Item),
+    ValidationError(ValidationError),
+    AuthenticationError(AuthenticationError),
+    PermissionError(PermissionError),
 }
 
 fn get_user_duplicate_error() -> FieldError {
@@ -269,14 +277,14 @@ impl Mutation {
         Ok(web::block(create_user).await?)
     }
 
-    async fn deleteUser(ctx: &Context, input: UserIdInput) -> FieldResult<UserIdResponse> {
+    async fn deleteUser(ctx: &Context, input: IntIdInput) -> FieldResult<IntIdResponse> {
         use crate::schema::users::dsl::*;
 
         // Authn and Authz
         match ctx.user.as_ref() {
             Some(u) if u.id == input.id => (),
-            Some(_) => return Ok(UserIdResponse::PermissionError(Default::default())),
-            None => return Ok(UserIdResponse::AuthenticationError(Default::default())),
+            Some(_) => return Ok(IntIdResponse::PermissionError(Default::default())),
+            None => return Ok(IntIdResponse::AuthenticationError(Default::default())),
         };
 
         let conn = ctx.db.get()?;
@@ -289,7 +297,7 @@ impl Mutation {
 
         web::block(delete).await?;
 
-        Ok(UserIdResponse::UserIdOutput(UserIdOutput { id: user_id }))
+        Ok(IntIdResponse::IntIdOutput(IntIdOutput { id: user_id }))
     }
 
     async fn changePassword(ctx: &Context, input: ChangePasswordUser) -> FieldResult<UserResponse> {
@@ -375,20 +383,20 @@ impl Mutation {
         Ok(web::block(login).await?)
     }
 
-    async fn logout(ctx: &Context, input: SessionIdInput) -> FieldResult<SessionIdResponse> {
+    async fn logout(ctx: &Context, input: UuidInput) -> FieldResult<UuidResponse> {
         use crate::schema::sessions::dsl::*;
 
         // Authn
         let current_user = match ctx.user.as_ref() {
             Some(u) => u,
-            None => return Ok(SessionIdResponse::AuthenticationError(Default::default())),
+            None => return Ok(UuidResponse::AuthenticationError(Default::default())),
         };
 
         let conn = ctx.db.get()?;
         let session_id = input.id;
         let current_user_id = current_user.id;
 
-        let logout = move || -> Result<SessionIdResponse, diesel::result::Error> {
+        let logout = move || -> Result<UuidResponse, diesel::result::Error> {
             let session = sessions
                 .select((id, created_at, user_id))
                 .find(session_id)
@@ -397,14 +405,66 @@ impl Mutation {
             // TODO: rewrite authz so its more of a "get entity, check perms" flow
             // Authz
             if session.user_id != current_user_id {
-                return Ok(SessionIdResponse::PermissionError(Default::default()));
+                return Ok(UuidResponse::PermissionError(Default::default()));
             }
 
             diesel::delete(sessions.filter(id.eq(session_id))).execute(&conn)?;
 
-            Ok(SessionIdResponse::SessionIdOutput(SessionIdOutput {
-                id: session_id,
-            }))
+            Ok(UuidResponse::UuidOutput(UuidOutput { id: session_id }))
+        };
+
+        Ok(web::block(logout).await?)
+    }
+
+    async fn createItem(ctx: &Context, input: NewItem) -> FieldResult<ItemResponse> {
+        use crate::schema::items::dsl::*;
+
+        // Authn and Authz
+        match ctx.user.as_ref() {
+            Some(u) if u.id == input.user_id => (),
+            Some(_) => return Ok(ItemResponse::PermissionError(Default::default())),
+            None => return Ok(ItemResponse::AuthenticationError(Default::default())),
+        };
+
+        match input.validate() {
+            Ok(_) => (),
+            Err(e) => return Ok(ItemResponse::ValidationError(ValidationError::new(e))),
+        };
+
+        let conn = ctx.db.get()?;
+
+        let create_item = move || -> Result<Item, diesel::result::Error> {
+            diesel::insert_into(items).values(&input).get_result(&conn)
+        };
+
+        Ok(ItemResponse::Item(web::block(create_item).await?))
+    }
+
+    async fn deleteItem(ctx: &Context, input: IntIdInput) -> FieldResult<IntIdResponse> {
+        use crate::schema::items::dsl::*;
+
+        // Authn
+        let current_user = match ctx.user.as_ref() {
+            Some(u) => u,
+            None => return Ok(IntIdResponse::AuthenticationError(Default::default())),
+        };
+
+        let conn = ctx.db.get()?;
+        let item_id = input.id;
+        let current_user_id = current_user.id;
+
+        let logout = move || -> Result<IntIdResponse, diesel::result::Error> {
+            let item = items.find(item_id).first::<Item>(&conn)?;
+
+            // TODO: rewrite authz so its more of a "get entity, check perms" flow
+            // Authz
+            if item.user_id != current_user_id {
+                return Ok(IntIdResponse::PermissionError(Default::default()));
+            }
+
+            diesel::delete(items.filter(id.eq(item_id))).execute(&conn)?;
+
+            Ok(IntIdResponse::IntIdOutput(IntIdOutput { id: item_id }))
         };
 
         Ok(web::block(logout).await?)

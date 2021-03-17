@@ -59,11 +59,13 @@ pub struct Item {
     pub protection_ends_at: DateTime<Utc>,
 }
 
-#[derive(Insertable)]
+#[derive(Insertable, GraphQLInputObject, Validate)]
 #[table_name = "items"]
 pub struct NewItem {
     pub user_id: i32,
+    #[validate(length(max = 250, message = "name must be less than 250 characters"))]
     pub name: String,
+    #[validate(range(min = 0, message = "price must be more than 0"))]
     pub price: i32,
     pub protection_ends_at: DateTime<Utc>,
 }

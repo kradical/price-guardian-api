@@ -18,7 +18,7 @@ pub struct FullUser {
     pub password: String,
 }
 
-#[derive(Queryable, GraphQLObject)]
+#[derive(Queryable)]
 pub struct User {
     pub id: i32,
     pub created_at: DateTime<Utc>,

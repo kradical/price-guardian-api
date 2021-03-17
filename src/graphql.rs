@@ -1,4 +1,5 @@
 use actix_web::web;
+use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use juniper::{
     graphql_object, EmptySubscription, FieldResult, GraphQLInputObject, GraphQLObject,
@@ -8,7 +9,9 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::db::PgPool;
-use crate::models::{hash_password, verify_password, FullUser, NewSession, NewUser, Session, User};
+use crate::models::{
+    hash_password, verify_password, FullUser, Item, NewSession, NewUser, Session, User,
+};
 
 pub struct Context {
     pub db: PgPool,
@@ -100,7 +103,57 @@ impl ValidationError {
     }
 }
 
+#[graphql_object(context = Context)]
+impl User {
+    fn id(&self) -> i32 {
+        self.id
+    }
+
+    fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+
+    fn updated_at(&self) -> DateTime<Utc> {
+        self.updated_at
+    }
+
+    fn email(&self) -> &str {
+        self.email.as_str()
+    }
+
+    async fn items(&self, ctx: &Context) -> FieldResult<Vec<Item>> {
+        use crate::schema::items::dsl::*;
+
+        let current_user_id = self.id;
+        let conn = ctx.db.get()?;
+
+        let find_items = move || -> Result<Vec<Item>, diesel::result::Error> {
+            items
+                .filter(user_id.eq(current_user_id))
+                .load::<Item>(&conn)
+        };
+
+        Ok(web::block(find_items).await?)
+    }
+
+    async fn sessions(&self, ctx: &Context) -> FieldResult<Vec<Session>> {
+        use crate::schema::sessions::dsl::*;
+
+        let current_user_id = self.id;
+        let conn = ctx.db.get()?;
+
+        let find_sessions = move || -> Result<Vec<Session>, diesel::result::Error> {
+            sessions
+                .filter(user_id.eq(current_user_id))
+                .load::<Session>(&conn)
+        };
+
+        Ok(web::block(find_sessions).await?)
+    }
+}
+
 #[derive(GraphQLUnion)]
+#[graphql(context = Context)]
 enum UserResponse {
     User(User),
     ValidationError(ValidationError),

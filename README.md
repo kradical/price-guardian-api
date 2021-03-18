@@ -23,8 +23,8 @@ Some example apps:
 
 General todos:
 
-- add Item model
-  - The "thing" we want to track price on and notify if it drops
+- move all the web::block calls up to the main graphql route
+- add item partial update?
 - add "admin" user
 - pull things into "actions" / "repositories" for a bit better organization
 - reset password flow
@@ -36,6 +36,8 @@ General todos:
 - add oauth signup / login (is amazon possible?? lookup popular options)
 - add price monitoring
   - amazon first, or do they not have a policy?
+- model out a price protection policy, allow it to be global (credit card or merchant level) and then applied to specific items (purchased with)
+- items should be able to have multiple price protection policies
 
 # Setup Instructions
 

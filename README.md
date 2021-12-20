@@ -4,6 +4,10 @@ Automated price protection tracking.
 
 Track prices and notify if price drops so you can get your well deserved refund (store price protection, visa price protection, etc.)
 
+Examples:
+- project layout: https://github.com/golang-standards/project-layout
+
+TODO:
 - backend up and running locally
   - Go, fiber
 - frontend up and running locally
@@ -36,7 +40,14 @@ Instructions are for a MacOS environment (M1 arm)
 
 ## Install Go
 
-TODO
+Follow instructions here: https://go.dev/doc/install
+
+## Install air
+
+Air is for hot reloading.
+
+Follow instructions here: https://github.com/cosmtrek/air#installation
+
 ## Database setup
 
 Install Postgresql and the trimmings:
@@ -47,4 +58,10 @@ Install Postgresql and the trimmings:
 
 ## Compile and Run
 
-TODO
+Run Locally w/ hot reloading:
+
+```
+➤ air
+```
+
+Release Build:

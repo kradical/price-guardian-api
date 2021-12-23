@@ -62,7 +62,7 @@ Follow instructions here: https://github.com/cosmtrek/air#installation
 3. Run migrations
 
 ```
-➤ migrate -path migrations -database postgres://localhost:5432/price-guardian?sslmode=disable up
+➤ migrate -path migrations -database pgx://localhost:5432/price-guardian\?sslmode=disable up
 ```
 
 4. Create a mgiration

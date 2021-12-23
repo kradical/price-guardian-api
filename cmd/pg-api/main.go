@@ -2,46 +2,108 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"log"
 	"os"
+	"reflect"
+	"strings"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
-	"github.com/jackc/pgx/v4"
-	"github.com/joho/godotenv"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4/pgxpool"
+	_ "github.com/joho/godotenv/autoload"
 )
 
-func main() {
-	err := godotenv.Load(".env")
+type NewUser struct {
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=8"`
+}
+type User struct {
+	Id    int    `json:"id"`
+	Email string `json:"email"`
+}
 
-	if err != nil {
-		log.Fatalf("Error loading .env file")
+// use a single instance of Validate, it caches struct info
+var validate *validator.Validate
+
+func msgForTag(fe validator.FieldError) string {
+	switch fe.Tag() {
+	case "required":
+		return "This field is required"
+	case "email":
+		return "Invalid email"
+	case "min":
+		return "Must be at least length " + fe.Param()
 	}
+	return fe.Error() // default error
+}
 
-	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+func main() {
+	dbPool, err := pgxpool.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v\n", err)
 	}
-	defer conn.Close(context.Background())
+	defer dbPool.Close()
 
-	var greeting string
-	err = conn.QueryRow(context.Background(), "select 'Hello, world!'").Scan(&greeting)
-	if err != nil {
-		log.Fatalf("QueryRow failed: %v\n", err)
-	}
+	validate = validator.New()
+	validate.RegisterTagNameFunc(func(fld reflect.StructField) string {
+		name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
 
-	fmt.Println(greeting)
+		if name == "-" {
+			return ""
+		}
+
+		return name
+	})
 
 	app := fiber.New()
 
 	api := app.Group("/api")
 
-	api.Get("/", func(c *fiber.Ctx) error {
-		return c.SendString("")
-	})
 	api.Get("/health", func(c *fiber.Ctx) error {
-		return c.SendString("")
+		return c.Send(nil)
+	})
+	api.Post("/users", func(c *fiber.Ctx) error {
+		newUser := new(NewUser)
+
+		if err := c.BodyParser(newUser); err != nil {
+			return err
+		}
+
+		err := validate.Struct(newUser)
+		if err != nil {
+			var errors fiber.Map
+			for _, err := range err.(validator.ValidationErrors) {
+				errors[err.Field()] = msgForTag(err)
+			}
+
+			return c.Status(fiber.ErrBadRequest.Code).JSON(errors)
+		}
+
+		// TODO: Hash Password
+
+		sqlStatement := `
+INSERT INTO users (email, password)
+VALUES ($1, $2)
+RETURNING id`
+		var id int
+		err = dbPool.QueryRow(context.Background(), sqlStatement, newUser.Email, newUser.Password).Scan(&id)
+
+		if err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.ConstraintName == "users_email_key" {
+				msg := "Email " + newUser.Email + " is already in use."
+				return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
+					"email": msg,
+				})
+			}
+
+			return fiber.ErrInternalServerError
+		}
+
+		return c.JSON(User{id, newUser.Email})
 	})
 
-	app.Listen(":8000")
+	log.Fatal(app.Listen(":8000"))
 }

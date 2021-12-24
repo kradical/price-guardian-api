@@ -2,15 +2,23 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"reflect"
 	"strings"
+	"time"
 
+	"github.com/andskur/argon2-hashing"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt"
+	"github.com/google/uuid"
 	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	_ "github.com/joho/godotenv/autoload"
 )
@@ -64,6 +72,59 @@ func main() {
 	api.Get("/health", func(c *fiber.Ctx) error {
 		return c.Send(nil)
 	})
+	api.Post("/auth/tokens", func(c *fiber.Ctx) error {
+		loginUser := new(NewUser)
+
+		if err := c.BodyParser(loginUser); err != nil {
+			return err
+		}
+
+		sqlStatement := "SELECT id, password FROM users WHERE email = $1"
+
+		var userId int
+		var hash string
+		err = dbPool.QueryRow(context.Background(), sqlStatement, loginUser.Email).Scan(&userId, &hash)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+					"email": "Incorrect email address",
+				})
+			}
+
+			return err
+		}
+
+		err = argon2.CompareHashAndPassword([]byte(hash), []byte(loginUser.Password))
+		if err != nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"password": "Incorrect password",
+			})
+		}
+
+		claims := jwt.StandardClaims{
+			ExpiresAt: time.Now().Unix() + 30*24*60*60,
+			IssuedAt:  time.Now().Unix(),
+			Issuer:    c.BaseURL(),
+			Id:        uuid.New().String(),
+			Subject:   fmt.Sprint(userId),
+		}
+
+		token := jwt.NewWithClaims(&jwt.SigningMethodEd25519{}, claims)
+
+		privateKey, err := base64.StdEncoding.DecodeString(os.Getenv("JWT_PRIVATE_KEY"))
+		if err != nil {
+			return err
+		}
+
+		tokenString, err := token.SignedString(ed25519.PrivateKey(privateKey))
+		if err != nil {
+			return err
+		}
+
+		return c.JSON(fiber.Map{
+			"token": tokenString,
+		})
+	})
 	api.Post("/users", func(c *fiber.Ctx) error {
 		newUser := new(NewUser)
 
@@ -81,14 +142,17 @@ func main() {
 			return c.Status(fiber.ErrBadRequest.Code).JSON(errors)
 		}
 
-		// TODO: Hash Password
+		hash, err := argon2.GenerateFromPassword([]byte(newUser.Password), argon2.DefaultParams)
+		if err != nil {
+			return err
+		}
 
 		sqlStatement := `
 INSERT INTO users (email, password)
 VALUES ($1, $2)
 RETURNING id`
 		var id int
-		err = dbPool.QueryRow(context.Background(), sqlStatement, newUser.Email, newUser.Password).Scan(&id)
+		err = dbPool.QueryRow(context.Background(), sqlStatement, newUser.Email, hash).Scan(&id)
 
 		if err != nil {
 			var pgErr *pgconn.PgError
@@ -99,7 +163,7 @@ RETURNING id`
 				})
 			}
 
-			return fiber.ErrInternalServerError
+			return err
 		}
 
 		return c.JSON(User{id, newUser.Email})

@@ -9,17 +9,16 @@ Examples:
 - https://github.com/jackc/pgx/issues/81#issuecomment-296446179
 
 TODO:
-- pgx connection pooling, good defaults, insert connection into middleware, add Scany?
 - user / auth system
-- reset password flow
-- confirm email flow
-  - remove permissions on unconfirmed email account ??
-- add 2FA
-- add oauth signup / login (is amazon possible?? lookup popular options)
+  - add created at / updated at timestamps
+  - add email confirmation
+  - reset password flow
+  - add 2FA
+  - add oauth signup / login (is amazon possible?? lookup popular options)
 - logging
 - add tests
 - frontend up and running locally
-  - svelte/sveltekit
+  - svelte (sveltekit?)
 - add price monitoring
   - amazon first, or do they not have a policy?
 - model out a price protection policy, allow it to be global (credit card or merchant level) and then applied to specific items (purchased with)

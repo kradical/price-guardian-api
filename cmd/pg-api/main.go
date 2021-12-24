@@ -103,9 +103,9 @@ func main() {
 
 		claims := jwt.StandardClaims{
 			ExpiresAt: time.Now().Unix() + 30*24*60*60,
+			Id:        uuid.New().String(),
 			IssuedAt:  time.Now().Unix(),
 			Issuer:    c.BaseURL(),
-			Id:        uuid.New().String(),
 			Subject:   fmt.Sprint(userId),
 		}
 

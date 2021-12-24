@@ -10,7 +10,6 @@ Examples:
 
 TODO:
 - user / auth system
-  - add created at / updated at timestamps
   - add email confirmation
   - reset password flow
   - add 2FA

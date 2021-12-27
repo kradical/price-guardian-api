@@ -5,17 +5,18 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"log"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/andskur/argon2-hashing"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt"
+	jwtware "github.com/gofiber/jwt/v3"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
@@ -48,6 +49,14 @@ func msgForTag(fe validator.FieldError) string {
 }
 
 func main() {
+	jwtKeyBytes, err := base64.StdEncoding.DecodeString(os.Getenv("JWT_PRIVATE_KEY"))
+	if err != nil {
+		log.Fatalf("Unable to parse jwt private key: %v\n", err)
+	}
+
+	jwtPrivateKey := ed25519.PrivateKey(jwtKeyBytes)
+	jwtPublicKey := jwtPrivateKey.Public()
+
 	dbPool, err := pgxpool.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v\n", err)
@@ -106,17 +115,12 @@ func main() {
 			Id:        uuid.New().String(),
 			IssuedAt:  time.Now().Unix(),
 			Issuer:    c.BaseURL(),
-			Subject:   fmt.Sprint(userId),
+			Subject:   strconv.Itoa(userId),
 		}
 
 		token := jwt.NewWithClaims(&jwt.SigningMethodEd25519{}, claims)
 
-		privateKey, err := base64.StdEncoding.DecodeString(os.Getenv("JWT_PRIVATE_KEY"))
-		if err != nil {
-			return err
-		}
-
-		tokenString, err := token.SignedString(ed25519.PrivateKey(privateKey))
+		tokenString, err := token.SignedString(ed25519.PrivateKey(jwtPrivateKey))
 		if err != nil {
 			return err
 		}
@@ -167,6 +171,35 @@ RETURNING id`
 		}
 
 		return c.JSON(User{id, newUser.Email})
+	})
+
+	// All Unauthenticated routes above here
+	api.Use(jwtware.New(jwtware.Config{
+		SigningKey:    jwtPublicKey,
+		SigningMethod: "EdDSA",
+		ContextKey:    "token",
+		Claims:        &jwt.StandardClaims{},
+	}))
+	api.Use(func(c *fiber.Ctx) error {
+		token := c.Locals("token").(*jwt.Token)
+		claims := token.Claims.(*jwt.StandardClaims)
+		userId, _ := strconv.Atoi(claims.Subject)
+		c.Locals("userId", userId)
+
+		return c.Next()
+	})
+
+	api.Get("/users/me", func(c *fiber.Ctx) error {
+		userId := c.Locals("userId").(int)
+
+		sqlStatement := `
+SELECT email
+FROM users
+WHERE id = $1`
+		user := User{userId, ""}
+		err = dbPool.QueryRow(context.Background(), sqlStatement, userId).Scan(&user.Email)
+
+		return c.JSON(user)
 	})
 
 	log.Fatal(app.Listen(":8000"))

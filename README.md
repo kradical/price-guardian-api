@@ -9,25 +9,23 @@ Examples:
 - https://github.com/jackc/pgx/issues/81#issuecomment-296446179
 
 TODO:
-- user / auth system
-  - add email confirmation
-  - reset password flow
-  - add 2FA
-  - add oauth signup / login (is amazon possible?? lookup popular options)
+- model out "item"
 - logging
+- refactor into cleaner file structure
 - add tests
 - frontend up and running locally
   - svelte (sveltekit?)
 - add price monitoring
   - amazon first, or do they not have a policy?
 - model out a price protection policy, allow it to be global (credit card or merchant level) and then applied to specific items (purchased with)
+- user / auth system
+  - add email confirmation
+  - reset password flow
+  - add 2FA
+  - add oauth signup / login (is amazon possible?? lookup popular options)
 - items should be able to have multiple price protection policies
 - deploy backend
-  - dockerize -> ecs
-  - cloudformation to manage infra.. or terraform.. other tools?
-  - deploy infra / code changes on merge to master? through CI? circleci?
 - deploy frontend
-  - cloudfront / s3
 
 # Setup Instructions
 

@@ -3,14 +3,15 @@ module github.com/kradical/price-guardian-api
 go 1.17
 
 require (
+	github.com/andskur/argon2-hashing v0.1.3
 	github.com/go-playground/validator/v10 v10.9.0
 	github.com/gofiber/fiber/v2 v2.23.0
+	github.com/gofiber/jwt/v3 v3.2.2
+	github.com/golang-jwt/jwt/v4 v4.2.0
+	github.com/google/uuid v1.3.0
 	github.com/jackc/pgconn v1.10.1
 	github.com/jackc/pgx/v4 v4.14.1
 	github.com/joho/godotenv v1.4.0
-	github.com/andskur/argon2-hashing v0.1.3
-	github.com/golang-jwt/jwt v3.2.2+incompatible
-	github.com/google/uuid v1.3.0
 )
 
 require (

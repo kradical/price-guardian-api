@@ -10,11 +10,14 @@ Examples:
 
 TODO:
 - model out "item"
+- error handling (return json, jwt errors, random errors)
 - logging
 - refactor into cleaner file structure
 - add tests
 - frontend up and running locally
   - svelte (sveltekit?)
+- add item pagination
+- how to turn item PATCH into a partial update?
 - add price monitoring
   - amazon first, or do they not have a policy?
 - model out a price protection policy, allow it to be global (credit card or merchant level) and then applied to specific items (purchased with)
